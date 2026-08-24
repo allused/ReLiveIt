@@ -1,0 +1,10 @@
+export const COOKIE_NAME = 'reliveit_session';
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const DEFAULT_QUICK_VOTE_COUNT = 20;
+export const MIN_QUICK_VOTE_COUNT = 1;
+export const MAX_QUICK_VOTE_COUNT = 50;
+export const DEFAULT_MAX_GALLERY_PHOTOS = 30;
+export const DEFAULT_TOP_N = 10;
+export const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
+export const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export const GALLERY_PAGE_SIZE = 24;
