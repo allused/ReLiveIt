@@ -1,8 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
+import convert from 'heic-convert';
 import sharp from 'sharp';
+import { isHeicUpload, looksLikeHeic } from '../common/image-upload.util';
 
 export type StoredImage = {
   originalKey: string;
@@ -27,20 +29,21 @@ export class ImageStorageService {
     originalFilename: string;
     mimeType: string;
   }): Promise<StoredImage> {
+    const decoded = await this.decode(params.buffer, params.mimeType, params.originalFilename);
     const ext =
-      params.mimeType === 'image/png' ? 'png' : params.mimeType === 'image/webp' ? 'webp' : 'jpg';
+      decoded.mimeType === 'image/png' ? 'png' : decoded.mimeType === 'image/webp' ? 'webp' : 'jpg';
     const originalKey = `${params.weddingId}/${params.photoId}/original.${ext}`;
     const mediumKey = `${params.weddingId}/${params.photoId}/medium.jpg`;
     const thumbnailKey = `${params.weddingId}/${params.photoId}/thumb.jpg`;
 
-    const image = sharp(params.buffer).rotate();
+    const image = sharp(decoded.buffer).rotate();
     const original = await image.toBuffer();
-    const medium = await sharp(params.buffer)
+    const medium = await sharp(decoded.buffer)
       .rotate()
       .resize({ width: 1200, withoutEnlargement: true })
       .jpeg({ quality: 82 })
       .toBuffer();
-    const thumbnail = await sharp(params.buffer)
+    const thumbnail = await sharp(decoded.buffer)
       .rotate()
       .resize({ width: 480, withoutEnlargement: true })
       .jpeg({ quality: 75 })
@@ -54,9 +57,24 @@ export class ImageStorageService {
       originalKey,
       mediumKey,
       thumbnailKey,
-      mimeType: params.mimeType,
+      mimeType: decoded.mimeType,
       fileSize: original.length,
     };
+  }
+
+  async saveCover(params: {
+    weddingId: string;
+    buffer: Buffer;
+    mimeType: string;
+    originalFilename?: string;
+  }): Promise<StoredImage> {
+    return this.saveImage({
+      weddingId: params.weddingId,
+      photoId: 'cover',
+      buffer: params.buffer,
+      originalFilename: params.originalFilename ?? 'cover',
+      mimeType: params.mimeType,
+    });
   }
 
   async read(key: string): Promise<Buffer> {
@@ -79,5 +97,27 @@ export class ImageStorageService {
     const path = join(this.root(), key);
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, data);
+  }
+
+  private async decode(
+    buffer: Buffer,
+    mimeType: string,
+    filename: string,
+  ): Promise<{ buffer: Buffer; mimeType: string }> {
+    if (!isHeicUpload(mimeType, filename) && !looksLikeHeic(buffer)) {
+      return { buffer, mimeType: mimeType || 'image/jpeg' };
+    }
+    try {
+      const jpeg = await convert({
+        buffer,
+        format: 'JPEG',
+        quality: 0.92,
+      });
+      return { buffer: Buffer.from(jpeg), mimeType: 'image/jpeg' };
+    } catch {
+      throw new BadRequestException(
+        'This iPhone photo could not be read. Try exporting it as JPEG, or pick the photo again.',
+      );
+    }
   }
 }

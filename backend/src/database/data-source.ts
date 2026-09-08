@@ -5,6 +5,7 @@ import { Admin } from '../entities/admin.entity';
 import { Category } from '../entities/category.entity';
 import { Photo } from '../entities/photo.entity';
 import { Session } from '../entities/session.entity';
+import { TimelineEvent } from '../entities/timeline-event.entity';
 import { Vote } from '../entities/vote.entity';
 import { Wedding } from '../entities/wedding.entity';
 import { WeddingParticipant } from '../entities/wedding-participant.entity';
@@ -23,6 +24,7 @@ export default new DataSource({
     Session,
     Photo,
     Vote,
+    TimelineEvent,
   ],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
 });

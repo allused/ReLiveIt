@@ -1,20 +1,24 @@
 import HomeOutlined from '@mui/icons-material/HomeOutlined';
-import CategoryOutlined from '@mui/icons-material/CategoryOutlined';
+import HowToVoteOutlined from '@mui/icons-material/HowToVoteOutlined';
+import PhotoLibraryOutlined from '@mui/icons-material/PhotoLibraryOutlined';
 import FavoriteBorder from '@mui/icons-material/FavoriteBorder';
 import AddAPhotoOutlined from '@mui/icons-material/AddAPhotoOutlined';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
 import Paper from '@mui/material/Paper';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useT } from '../i18n';
 
 export function BottomNav({ slug, quickVoteEnabled }: { slug: string; quickVoteEnabled: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const t = useT();
   const items = [
-    { to: '', label: 'Home', icon: <HomeOutlined /> },
-    { to: 'categories', label: 'Categories', icon: <CategoryOutlined /> },
-    ...(quickVoteEnabled ? [{ to: 'quick-vote', label: 'Quick Vote', icon: <FavoriteBorder /> }] : []),
-    { to: 'upload', label: 'Upload', icon: <AddAPhotoOutlined /> },
+    { to: '', label: t('nav.home'), icon: <HomeOutlined /> },
+    { to: 'categories', label: t('nav.vote'), icon: <HowToVoteOutlined /> },
+    { to: 'gallery', label: t('nav.gallery'), icon: <PhotoLibraryOutlined /> },
+    ...(quickVoteEnabled ? [{ to: 'quick-vote', label: t('nav.quickVote'), icon: <FavoriteBorder /> }] : []),
+    { to: 'upload', label: t('nav.upload'), icon: <AddAPhotoOutlined /> },
   ];
   const current =
     items.find((item) => {

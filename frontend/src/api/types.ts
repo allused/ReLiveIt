@@ -10,9 +10,10 @@ export type ParticipantUser = {
   weddingId: string;
   weddingSlug: string;
   weddingName: string;
-  primaryName: string;
+  primaryName: string | null;
   secondaryName: string | null;
   displayName: string;
+  claimed: boolean;
 };
 
 export type AuthUser = AdminUser | ParticipantUser;
@@ -25,9 +26,11 @@ export type WeddingSummary = {
   quickVoteEnabled: boolean;
   quickVotePhotoCount: number;
   createdAt: string;
+  updatedAt: string;
   concludedAt: string | null;
   categoryCount?: number;
   photoCount?: number;
+  hasCoverPhoto?: boolean;
 };
 
 export type Category = {
@@ -36,6 +39,7 @@ export type Category = {
   sortOrder: number;
   isActive: boolean;
   myPhoto?: Photo | null;
+  previewPhoto?: Photo | null;
 };
 
 export type Photo = {
@@ -50,9 +54,10 @@ export type Photo = {
 export type Participant = {
   id: string;
   role: 'GUEST' | 'REVIEWER';
-  primaryName: string;
+  primaryName: string | null;
   secondaryName: string | null;
   displayName: string;
+  claimed: boolean;
   status: 'ACTIVE' | 'INACTIVE';
   createdAt: string;
   lastAccessedAt: string | null;
@@ -72,22 +77,36 @@ export type PagedPhotos = {
   limit: number;
 };
 
+export type TimelineEvent = {
+  id: string;
+  weddingId: string;
+  title: string;
+  occursAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TimelineItem =
+  | { type: 'event'; event: TimelineEvent }
+  | { type: 'photos'; label: string; photos: Photo[] };
+
+export type RankingItem = {
+  id: string;
+  rank: number;
+  totalPoints: number;
+  voteCount: number;
+  approvalRate: number;
+  photo: Photo | null;
+  category?: Category | null;
+};
+
 export type RankingRow = {
   category: Category;
-  top: Array<{
-    id: string;
-    rank: number;
-    totalPoints: number;
-    voteCount: number;
-    approvalRate: number;
-    photo: Photo | null;
-  }>;
-  all: Array<{
-    id: string;
-    rank: number;
-    totalPoints: number;
-    voteCount: number;
-    approvalRate: number;
-    photo: Photo | null;
-  }>;
+  top: RankingItem[];
+  all: RankingItem[];
+};
+
+export type RankingsResponse = {
+  overall: RankingItem[];
+  categories: RankingRow[];
 };

@@ -1,10 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { Response } from 'express';
+import * as QRCode from 'qrcode';
 import { IsNull, Repository } from 'typeorm';
+import { ZipFile } from 'yazl';
 import { InvitationCryptoService } from '../auth/invitation-crypto.service';
 import { SessionService } from '../auth/session.service';
+import { participantDisplayName } from '../common/participant-name.util';
 import { AccessInvitation } from '../entities/access-invitation.entity';
-import { WeddingParticipant } from '../entities/wedding-participant.entity';
+import { ParticipantRole, WeddingParticipant } from '../entities/wedding-participant.entity';
+import { WeddingsService } from './weddings.service';
 
 @Injectable()
 export class InvitationsService {
@@ -15,6 +20,7 @@ export class InvitationsService {
     private readonly participants: Repository<WeddingParticipant>,
     private readonly crypto: InvitationCryptoService,
     private readonly sessions: SessionService,
+    private readonly weddings: WeddingsService,
   ) {}
 
   async createForParticipant(participantId: string) {
@@ -68,6 +74,56 @@ export class InvitationsService {
     };
   }
 
+  async writeQrZip(weddingId: string, res: Response) {
+    const wedding = await this.weddings.get(weddingId);
+    const people = await this.participants.find({
+      where: { weddingId },
+      order: { createdAt: 'ASC' },
+    });
+
+    const entries: { name: string; png: Buffer }[] = [];
+    const used = new Set<string>();
+    let guestIndex = 0;
+    let coupleIndex = 0;
+
+    for (const person of people) {
+      const invitation = await this.invitations.findOne({
+        where: { participantId: person.id, revokedAt: IsNull() },
+        order: { createdAt: 'DESC' },
+      });
+      if (!invitation) continue;
+
+      const url = this.crypto.inviteUrl(this.crypto.decrypt(invitation.encryptedToken));
+      const png = await QRCode.toBuffer(url, { type: 'png', width: 512, margin: 2 });
+      const folder = person.role === ParticipantRole.REVIEWER ? 'couple' : 'guests';
+      const index = person.role === ParticipantRole.REVIEWER ? ++coupleIndex : ++guestIndex;
+      entries.push({
+        name: uniqueZipName(`${folder}/${padIndex(index)}-${safeLabel(participantDisplayName(person))}.png`, used),
+        png,
+      });
+    }
+
+    if (!entries.length) {
+      throw new NotFoundException('No invitation QR codes to download.');
+    }
+
+    const filename = `${wedding.slug}-qr-codes.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    const zip = new ZipFile();
+    const done = new Promise<void>((resolve, reject) => {
+      res.on('finish', resolve);
+      zip.outputStream.on('error', reject);
+    });
+    zip.outputStream.pipe(res);
+    for (const entry of entries) {
+      zip.addBuffer(entry.png, entry.name);
+    }
+    zip.end();
+    await done;
+  }
+
   async getRawToken(participantId: string): Promise<string> {
     const invitation = await this.invitations.findOne({
       where: { participantId, revokedAt: IsNull() },
@@ -86,4 +142,31 @@ export class InvitationsService {
     }
     return participant;
   }
+}
+
+function padIndex(index: number) {
+  return String(index).padStart(2, '0');
+}
+
+function safeLabel(name: string) {
+  const cleaned = name
+    .normalize('NFKD')
+    .replace(/[^\w\s&-]+/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+  return cleaned || 'guest';
+}
+
+function uniqueZipName(name: string, used: Set<string>): string {
+  let next = name;
+  let n = 2;
+  while (used.has(next.toLowerCase())) {
+    const dot = name.lastIndexOf('.');
+    const stem = dot > 0 ? name.slice(0, dot) : name;
+    const ext = dot > 0 ? name.slice(dot) : '';
+    next = `${stem}-${n}${ext}`;
+    n += 1;
+  }
+  used.add(next.toLowerCase());
+  return next;
 }

@@ -5,8 +5,10 @@ import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { api, mediaUrl } from '../api/client';
+import { mediaUrl } from '../api/client';
+import { useCastVote } from '../api/hooks';
 import type { Photo } from '../api/types';
+import { useT } from '../i18n';
 
 const THRESHOLD = 110;
 const MAX_VISIBLE = 3;
@@ -28,6 +30,8 @@ export function VoteDeck({
   const indexRef = useRef(0);
   indexRef.current = index;
   const photo = photos[index];
+  const t = useT();
+  const { mutateAsync: castVote } = useCastVote();
 
   const paint = useCallback((x: number, y: number, animate: boolean) => {
     const card = cardRef.current;
@@ -64,15 +68,12 @@ export function VoteDeck({
       const fly = (value === 1 ? 1 : -1) * (window.innerWidth * 0.95);
       paint(fly, drag.current.y * 0.4, true);
       try {
-        await api(`/photos/${current.id}/vote`, {
-          method: 'POST',
-          body: JSON.stringify({ value }),
-        });
+        await castVote({ photoId: current.id, value });
       } finally {
         window.setTimeout(() => finish(indexRef.current), 280);
       }
     },
-    [finish, paint, photos],
+    [castVote, finish, paint, photos],
   );
 
   useEffect(() => {
@@ -91,7 +92,7 @@ export function VoteDeck({
   return (
     <Stack spacing={1.5} sx={{ alignItems: 'center' }}>
       <Typography variant="overline" color="text.secondary">
-        {index + 1} / {photos.length} · drag right for +1
+        {t('guest.vote.progress', { current: index + 1, total: photos.length })}
       </Typography>
 
       <Box
@@ -160,7 +161,7 @@ export function VoteDeck({
                   : undefined
               }
               role={isTop ? 'img' : undefined}
-              aria-label={isTop ? 'Photo to vote on. Drag right for a point, left to pass.' : undefined}
+              aria-label={isTop ? t('guest.vote.cardLabel') : undefined}
               sx={{
                 position: 'absolute',
                 inset: 0,
@@ -186,8 +187,8 @@ export function VoteDeck({
               />
               {isTop && (
                 <>
-                  <Stamp ref={likeRef} tone="like" label="Hell yeah" />
-                  <Stamp ref={passRef} tone="pass" label="Hell nah" />
+                  <Stamp ref={likeRef} tone="like" label={t('guest.vote.like')} />
+                  <Stamp ref={passRef} tone="pass" label={t('guest.vote.pass')} />
                 </>
               )}
             </Box>
@@ -197,7 +198,7 @@ export function VoteDeck({
 
       <Stack direction="row" spacing={3} sx={{ justifyContent: 'center', alignItems: 'center', pt: 0.5 }}>
         <IconButton
-          aria-label="Pass, no point"
+          aria-label={t('guest.vote.passAria')}
           onClick={() => void decide(0)}
           disabled={Boolean(leaving)}
           sx={{
@@ -213,7 +214,7 @@ export function VoteDeck({
           <Close />
         </IconButton>
         <IconButton
-          aria-label="Give one point"
+          aria-label={t('guest.vote.likeAria')}
           onClick={() => void decide(1)}
           disabled={Boolean(leaving)}
           sx={{

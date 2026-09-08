@@ -38,6 +38,10 @@ async function colorJpeg(hex: string, label: string): Promise<Buffer> {
 }
 
 async function bootstrap() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Refusing to run seed in production. Create the wedding in the admin UI.');
+  }
+
   const app = await NestFactory.createApplicationContext(AppModule);
   const admins = app.get<Repository<Admin>>(getRepositoryToken(Admin));
   const weddings = app.get<Repository<Wedding>>(getRepositoryToken(Wedding));
@@ -85,6 +89,7 @@ async function bootstrap() {
       role: ParticipantRole.GUEST,
       primaryName: 'John',
       secondaryName: null,
+      claimedAt: new Date(),
       status: ParticipantStatus.ACTIVE,
     }),
   );
@@ -94,6 +99,7 @@ async function bootstrap() {
       role: ParticipantRole.GUEST,
       primaryName: 'Anna',
       secondaryName: 'Bence',
+      claimedAt: new Date(),
       status: ParticipantStatus.ACTIVE,
     }),
   );
@@ -103,6 +109,7 @@ async function bootstrap() {
       role: ParticipantRole.GUEST,
       primaryName: 'Maria',
       secondaryName: null,
+      claimedAt: new Date(),
       status: ParticipantStatus.ACTIVE,
     }),
   );
@@ -112,6 +119,7 @@ async function bootstrap() {
       role: ParticipantRole.REVIEWER,
       primaryName: 'Anna',
       secondaryName: 'Peter',
+      claimedAt: new Date(),
       status: ParticipantStatus.ACTIVE,
     }),
   );

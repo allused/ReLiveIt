@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { Category } from './category.entity';
 import { Photo } from './photo.entity';
+import { TimelineEvent } from './timeline-event.entity';
 import { WeddingParticipant } from './wedding-participant.entity';
 
 export enum WeddingStatus {
@@ -38,6 +39,15 @@ export class Wedding {
   @Column({ type: 'int', default: 20 })
   quickVotePhotoCount: number;
 
+  @Column({ type: 'varchar', nullable: true })
+  coverOriginalKey: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  coverMediumKey: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  coverThumbnailKey: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -55,4 +65,7 @@ export class Wedding {
 
   @OneToMany(() => Photo, (photo) => photo.wedding)
   photos: Photo[];
+
+  @OneToMany(() => TimelineEvent, (event) => event.wedding)
+  timelineEvents: TimelineEvent[];
 }

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardActionArea from '@mui/material/CardActionArea';
 import CardContent from '@mui/material/CardContent';
@@ -10,81 +11,85 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { Link as RouterLink, useParams } from 'react-router-dom';
-import { api, ApiError } from '../../api/client';
+import { ApiError } from '../../api/client';
+import { useConcludeWedding, useReviewerDashboard } from '../../api/hooks';
+import { LanguageSwitch } from '../../components/LanguageSwitch';
 import { AppButton, ErrorText, Eyebrow, Screen } from '../../components/ui';
-
-type Dashboard = {
-  id: string;
-  name: string;
-  status: 'ACTIVE' | 'CONCLUDED';
-  photoCount: number;
-  categoryCount: number;
-  guestCount: number;
-};
+import { useT } from '../../i18n';
 
 export function ReviewerHome() {
   const { weddingId } = useParams();
-  const [data, setData] = useState<Dashboard | null>(null);
+  const { data } = useReviewerDashboard(weddingId);
+  const concludeWedding = useConcludeWedding();
+  const t = useT();
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState('');
-
-  const load = () => {
-    if (!weddingId) return;
-    void api<Dashboard>(`/reviewer/weddings/${weddingId}`).then(setData);
-  };
-
-  useEffect(() => {
-    load();
-  }, [weddingId]);
 
   const conclude = async () => {
     if (!weddingId) return;
     try {
-      await api(`/reviewer/weddings/${weddingId}/conclude`, { method: 'POST' });
+      await concludeWedding.mutateAsync(weddingId);
       setConfirm(false);
-      load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not conclude the wedding.');
+      setError(err instanceof ApiError ? err.message : t('reviewer.home.concludeFailed'));
     }
   };
 
-  if (!data) return <Screen>Loading…</Screen>;
+  if (!data) return <Screen>{t('common.loading')}</Screen>;
   const active = data.status === 'ACTIVE';
 
   return (
     <Screen>
-      <Eyebrow>{active ? 'Wedding is active' : 'Wedding concluded'}</Eyebrow>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <LanguageSwitch />
+      </Box>
+      <Eyebrow>{active ? t('reviewer.home.active') : t('reviewer.home.concluded')}</Eyebrow>
       <Typography variant="h1">{data.name}</Typography>
       <Typography color="text.secondary" sx={{ mt: 1 }}>
-        {data.photoCount} photos · {data.categoryCount} categories · {data.guestCount} guests
+        {t('reviewer.home.stats', {
+          photos: data.photoCount,
+          categories: data.categoryCount,
+          guests: data.guestCount,
+        })}
       </Typography>
       <Stack spacing={1.5} sx={{ mt: 4 }}>
-        <NavCard to={`/reviewer/${weddingId}/gallery`} title="Gallery" body="Every photo as it arrives" />
-        <NavCard to={`/reviewer/${weddingId}/categories`} title="Categories" />
-        <NavCard to={`/reviewer/${weddingId}/timeline`} title="Timeline" body="Relive the evening" />
+        <NavCard
+          to={`/reviewer/${weddingId}/gallery`}
+          title={t('reviewer.home.gallery')}
+          body={t('reviewer.home.galleryBody')}
+        />
+        <NavCard to={`/reviewer/${weddingId}/categories`} title={t('reviewer.home.categories')} />
+        <NavCard
+          to={`/reviewer/${weddingId}/timeline`}
+          title={t('reviewer.home.timeline')}
+          body={t('reviewer.home.timelineBody')}
+        />
         {!active && (
-          <NavCard to={`/reviewer/${weddingId}/rankings`} title="Top photos" body="Final rankings" gold />
+          <NavCard
+            to={`/reviewer/${weddingId}/rankings`}
+            title={t('reviewer.home.topPhotos')}
+            body={t('reviewer.home.topPhotosBody')}
+            gold
+          />
         )}
       </Stack>
       {active && (
         <AppButton tone="danger" fullWidth sx={{ mt: 4 }} onClick={() => setConfirm(true)}>
-          Conclude wedding
+          {t('reviewer.home.conclude')}
         </AppButton>
       )}
       <ErrorText>{error}</ErrorText>
       <Dialog open={confirm} onClose={() => setConfirm(false)} fullWidth>
-        <DialogTitle>Conclude this wedding?</DialogTitle>
+        <DialogTitle>{t('reviewer.home.concludeTitle')}</DialogTitle>
         <DialogContent>
-          <DialogContentText>
-            After concluding, guests will no longer be able to upload or vote on photos.
-          </DialogContentText>
+          <DialogContentText>{t('reviewer.home.concludeBody')}</DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <AppButton tone="ghost" onClick={() => setConfirm(false)}>
-            Cancel
+            {t('common.cancel')}
           </AppButton>
-          <AppButton tone="danger" onClick={() => void conclude()}>
-            Conclude
+          <AppButton tone="danger" onClick={() => void conclude()} disabled={concludeWedding.isPending}>
+            {t('reviewer.home.concludeConfirm')}
           </AppButton>
         </DialogActions>
       </Dialog>

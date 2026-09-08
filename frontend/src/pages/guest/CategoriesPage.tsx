@@ -1,56 +1,71 @@
-import { useEffect, useState } from 'react';
+import HowToVoteOutlined from '@mui/icons-material/HowToVoteOutlined';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import CardActionArea from '@mui/material/CardActionArea';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { Link as RouterLink, useParams } from 'react-router-dom';
-import { api, mediaUrl } from '../../api/client';
-import type { Category, GuestWedding } from '../../api/types';
-import { Screen } from '../../components/ui';
+import { mediaUrl } from '../../api/client';
+import { useGuestWedding } from '../../api/hooks';
+import { AppButton, Screen } from '../../components/ui';
+import { useT } from '../../i18n';
 
 export function CategoriesPage() {
   const { slug } = useParams();
-  const [categories, setCategories] = useState<Category[]>([]);
-
-  useEffect(() => {
-    if (!slug) return;
-    void api<GuestWedding>(`/weddings/${slug}`).then((data) => setCategories(data.categories));
-  }, [slug]);
+  const { data: wedding } = useGuestWedding(slug);
+  const t = useT();
+  const categories = wedding?.categories ?? [];
+  const concluded = wedding?.status === 'CONCLUDED';
 
   return (
     <Screen>
-      <Typography variant="h1">Categories</Typography>
+      <Typography variant="h1">{t('guest.categories.title')}</Typography>
       <Typography color="text.secondary" sx={{ mt: 1 }}>
-        Open a category to vote, or see your photo.
+        {t('guest.categories.body')}
       </Typography>
       <Stack spacing={1.5} sx={{ mt: 3 }}>
-        {categories.map((category) => (
-          <Card key={category.id}>
-            <CardActionArea component={RouterLink} to={`/wedding/${slug}/categories/${category.id}`}>
-              <Stack direction="row" spacing={2} sx={{ p: 2, alignItems: 'center' }}>
-                {category.myPhoto ? (
-                  <Avatar
-                    src={mediaUrl(category.myPhoto.id, 'thumb')}
-                    variant="rounded"
-                    sx={{ width: 64, height: 64, borderRadius: 3 }}
-                  />
-                ) : (
-                  <Avatar variant="rounded" sx={{ width: 64, height: 64, borderRadius: 3, bgcolor: 'background.default', color: 'secondary.main' }}>
-                    +
-                  </Avatar>
-                )}
-                <Box>
-                  <Typography variant="h2">{category.name}</Typography>
-                  <Typography color="text.secondary" variant="body2">
-                    {category.myPhoto ? 'Your photo is in' : 'Add one photo, then vote'}
-                  </Typography>
-                </Box>
+        {categories.map((category) => {
+          const preview = category.previewPhoto ?? category.myPhoto;
+          return (
+            <Card key={category.id}>
+              <Stack spacing={1.5} sx={{ p: 2 }}>
+                <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+                  {preview ? (
+                    <Avatar
+                      src={mediaUrl(preview.id, 'thumb')}
+                      variant="rounded"
+                      sx={{ width: 64, height: 64, borderRadius: 3 }}
+                    />
+                  ) : (
+                    <Avatar
+                      variant="rounded"
+                      sx={{
+                        width: 64,
+                        height: 64,
+                        borderRadius: 3,
+                        bgcolor: 'background.default',
+                        color: 'secondary.main',
+                      }}
+                    >
+                      <HowToVoteOutlined />
+                    </Avatar>
+                  )}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="h2">{category.name}</Typography>
+                  </Box>
+                </Stack>
+                <AppButton
+                  tone="gold"
+                  fullWidth
+                  component={RouterLink}
+                  to={`/wedding/${slug}/categories/${category.id}`}
+                >
+                  {concluded ? t('guest.categories.gallery') : t('guest.categories.vote')}
+                </AppButton>
               </Stack>
-            </CardActionArea>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </Stack>
     </Screen>
   );

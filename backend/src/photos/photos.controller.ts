@@ -2,10 +2,13 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
+  Res,
   UploadedFile,
   UploadedFiles,
   UseGuards,
@@ -13,31 +16,24 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import type { Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { ClaimedGuard } from '../auth/guards/claimed.guard';
 import { GuestGuard } from '../auth/guards/guest.guard';
 import { SessionGuard } from '../auth/guards/session.guard';
 import type { ParticipantAuth } from '../auth/auth.types';
-import { ALLOWED_MIME_TYPES, DEFAULT_MAX_FILE_SIZE } from '../common/constants';
+import { DEFAULT_MAX_FILE_SIZE } from '../common/constants';
+import { imageFileFilter } from '../common/image-upload.util';
 import { PhotosService } from './photos.service';
 
 const uploadOptions = {
   storage: memoryStorage(),
   limits: { fileSize: DEFAULT_MAX_FILE_SIZE },
-  fileFilter: (
-    _req: Express.Request,
-    file: Express.Multer.File,
-    cb: (error: Error | null, acceptFile: boolean) => void,
-  ) => {
-    if (!ALLOWED_MIME_TYPES.includes(file.mimetype as (typeof ALLOWED_MIME_TYPES)[number])) {
-      cb(new BadRequestException('Only JPEG, PNG, and WEBP photos are supported.'), false);
-      return;
-    }
-    cb(null, true);
-  },
+  fileFilter: imageFileFilter,
 };
 
 @Controller()
-@UseGuards(SessionGuard, GuestGuard)
+@UseGuards(SessionGuard, GuestGuard, ClaimedGuard)
 export class PhotosController {
   constructor(private readonly photos: PhotosService) {}
 
@@ -54,6 +50,8 @@ export class PhotosController {
       concludedAt: wedding.concludedAt,
       quickVoteEnabled: wedding.quickVoteEnabled,
       quickVotePhotoCount: wedding.quickVotePhotoCount,
+      hasCoverPhoto: Boolean(wedding.coverMediumKey),
+      updatedAt: wedding.updatedAt,
       ...state,
     };
   }
@@ -64,6 +62,17 @@ export class PhotosController {
     this.photos.assertGuestWedding(auth, wedding);
     const state = await this.photos.guestCategoryState(wedding, auth);
     return state.categories;
+  }
+
+  @Get('weddings/:slug/photos/zip')
+  async downloadZip(
+    @Param('slug') slug: string,
+    @CurrentUser() auth: ParticipantAuth,
+    @Res() res: Response,
+  ) {
+    const wedding = await this.photos.getWeddingBySlug(slug);
+    this.photos.assertGuestWedding(auth, wedding);
+    await this.photos.writeZip(wedding, res);
   }
 
   @Get('weddings/:slug/photos')
@@ -84,6 +93,16 @@ export class PhotosController {
       categoryId: categoryId || undefined,
       galleryOnly: galleryOnly === 'true',
     });
+  }
+
+  @Delete('weddings/:slug/photos/:photoId')
+  async deleteOwnCategoryPhoto(
+    @Param('slug') slug: string,
+    @Param('photoId', ParseUUIDPipe) photoId: string,
+    @CurrentUser() auth: ParticipantAuth,
+  ) {
+    const wedding = await this.photos.getWeddingBySlug(slug);
+    return this.photos.deleteOwnCategoryPhoto({ wedding, auth, photoId });
   }
 
   @Post('weddings/:slug/photos')

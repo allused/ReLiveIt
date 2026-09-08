@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardActionArea from '@mui/material/CardActionArea';
@@ -6,37 +6,27 @@ import CardContent from '@mui/material/CardContent';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { Link as RouterLink, useParams } from 'react-router-dom';
-import { api } from '../../api/client';
-import type { Category, Photo } from '../../api/types';
+import { useReviewerCategories, useReviewerCategoryPhotos } from '../../api/hooks';
 import { PhotoGrid } from '../../components/PhotoGrid';
 import { PhotoViewer } from '../../components/PhotoViewer';
 import { AppButton, Screen } from '../../components/ui';
+import { useT } from '../../i18n';
 
 export function ReviewerCategories() {
   const { weddingId, categoryId } = useParams();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [photos, setPhotos] = useState<Photo[]>([]);
+  const { data: categories = [] } = useReviewerCategories(weddingId);
+  const photosQuery = useReviewerCategoryPhotos(weddingId, categoryId);
   const [viewer, setViewer] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!weddingId) return;
-    void api<Category[]>(`/reviewer/weddings/${weddingId}/categories`).then(setCategories);
-  }, [weddingId]);
-
-  useEffect(() => {
-    if (!weddingId || !categoryId) return;
-    void api<{ items: Photo[] }>(`/reviewer/weddings/${weddingId}/photos?categoryId=${categoryId}&limit=60`).then(
-      (data) => setPhotos(data.items),
-    );
-  }, [categoryId, weddingId]);
+  const t = useT();
+  const photos = photosQuery.data?.items ?? [];
 
   if (!categoryId) {
     return (
       <Screen>
         <AppButton tone="ghost" component={RouterLink} to={`/reviewer/${weddingId}`} sx={{ mb: 1 }}>
-          Dashboard
+          {t('common.dashboard')}
         </AppButton>
-        <Typography variant="h1">Categories</Typography>
+        <Typography variant="h1">{t('reviewer.categories.title')}</Typography>
         <Stack spacing={1.5} sx={{ mt: 3 }}>
           {categories.map((category) => (
             <Card key={category.id}>
@@ -57,7 +47,7 @@ export function ReviewerCategories() {
   return (
     <Screen>
       <AppButton tone="ghost" component={RouterLink} to={`/reviewer/${weddingId}/categories`} sx={{ mb: 1 }}>
-        All categories
+        {t('reviewer.categories.all')}
       </AppButton>
       <Typography variant="h1">{current?.name}</Typography>
       <Box sx={{ mt: 3 }}>

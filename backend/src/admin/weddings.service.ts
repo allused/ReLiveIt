@@ -1,19 +1,27 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { DEFAULT_QUICK_VOTE_COUNT } from '../common/constants';
+import { DEFAULT_MAX_FILE_SIZE, DEFAULT_QUICK_VOTE_COUNT } from '../common/constants';
 import { slugify } from '../common/slug';
 import { Wedding, WeddingStatus } from '../entities/wedding.entity';
+import { ImageStorageService } from '../storage/image-storage.service';
 import { CreateWeddingDto } from './dto/create-wedding.dto';
 import { UpdateWeddingDto } from './dto/update-wedding.dto';
 
-type WeddingWithCounts = Wedding & { categoryCount: number; photoCount: number };
+type WeddingWithCounts = Wedding & {
+  categoryCount: number;
+  photoCount: number;
+  hasCoverPhoto: boolean;
+};
 
 @Injectable()
 export class WeddingsService {
   constructor(
     @InjectRepository(Wedding)
     private readonly weddings: Repository<Wedding>,
+    private readonly storage: ImageStorageService,
+    private readonly config: ConfigService,
   ) {}
 
   async list() {
@@ -58,6 +66,63 @@ export class WeddingsService {
     return this.withCounts(await this.weddings.save(wedding));
   }
 
+  async uploadCover(id: string, file: Express.Multer.File) {
+    const wedding = await this.weddings.findOne({ where: { id } });
+    if (!wedding) {
+      throw new NotFoundException('Wedding not found.');
+    }
+    const maxSize = Number(this.config.get('MAX_FILE_SIZE') ?? DEFAULT_MAX_FILE_SIZE);
+    if (file.size > maxSize) {
+      throw new BadRequestException('This photo is too large to upload.');
+    }
+
+    const previousKeys = [wedding.coverOriginalKey, wedding.coverMediumKey, wedding.coverThumbnailKey].filter(
+      (key): key is string => Boolean(key),
+    );
+
+    const stored = await this.storage.saveCover({
+      weddingId: wedding.id,
+      buffer: file.buffer,
+      mimeType: file.mimetype,
+      originalFilename: file.originalname,
+    });
+    wedding.coverOriginalKey = stored.originalKey;
+    wedding.coverMediumKey = stored.mediumKey;
+    wedding.coverThumbnailKey = stored.thumbnailKey;
+    wedding.updatedAt = new Date();
+    const saved = await this.weddings.save(wedding);
+
+    const stale = previousKeys.filter(
+      (key) => key !== stored.originalKey && key !== stored.mediumKey && key !== stored.thumbnailKey,
+    );
+    if (stale.length) {
+      await this.storage.remove(stale);
+    }
+
+    return this.withCounts(saved);
+  }
+
+  async removeCover(id: string) {
+    const wedding = await this.weddings.findOne({ where: { id } });
+    if (!wedding) {
+      throw new NotFoundException('Wedding not found.');
+    }
+    if (!wedding.coverMediumKey) {
+      throw new NotFoundException('No couple photo to remove.');
+    }
+
+    await this.storage.remove(
+      [wedding.coverOriginalKey, wedding.coverMediumKey, wedding.coverThumbnailKey].filter(
+        (key): key is string => Boolean(key),
+      ),
+    );
+    wedding.coverOriginalKey = null;
+    wedding.coverMediumKey = null;
+    wedding.coverThumbnailKey = null;
+    wedding.updatedAt = new Date();
+    return this.withCounts(await this.weddings.save(wedding));
+  }
+
   private async withCounts(wedding: Wedding): Promise<WeddingWithCounts> {
     const raw = await this.weddings
       .createQueryBuilder('w')
@@ -71,6 +136,7 @@ export class WeddingsService {
       ...wedding,
       categoryCount: Number(raw?.categoryCount ?? 0),
       photoCount: Number(raw?.photoCount ?? 0),
+      hasCoverPhoto: Boolean(wedding.coverMediumKey),
     };
   }
 

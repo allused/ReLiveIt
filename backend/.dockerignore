@@ -1,0 +1,11 @@
+node_modules
+dist
+uploads
+uploads-test
+coverage
+.env
+.env.*
+*.md
+test
+seed-invites.dev.txt
+**/*spec.ts

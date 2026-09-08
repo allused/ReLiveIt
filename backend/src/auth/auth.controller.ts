@@ -20,6 +20,8 @@ import { AuthService } from './auth.service';
 import { clearSessionCookie, setSessionCookie } from './cookie';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
+import { ClaimNameDto } from './dto/claim-name.dto';
+import { GuestGuard } from './guards/guest.guard';
 import { SessionGuard } from './guards/session.guard';
 import type { AuthContext } from './auth.types';
 import { SessionService } from './session.service';
@@ -73,10 +75,11 @@ export class AuthController {
         'This invitation link is invalid, expired, or has been replaced. Please ask the wedding organizer for a new QR code.',
       );
     }
-    const { sessionToken, participant } = await this.auth.exchangeInvitation(token);
+    const { sessionToken, participant, needsName } = await this.auth.exchangeInvitation(token);
     setSessionCookie(res, sessionToken, this.config);
-    const redirectTo =
-      participant.role === ParticipantRole.REVIEWER
+    const redirectTo = needsName
+      ? '/welcome'
+      : participant.role === ParticipantRole.REVIEWER
         ? `/reviewer/${participant.weddingId}`
         : `/wedding/${participant.wedding.slug}`;
     return {
@@ -84,7 +87,15 @@ export class AuthController {
       role: participant.role,
       weddingId: participant.weddingId,
       weddingSlug: participant.wedding.slug,
+      needsName,
       redirectTo,
     };
+  }
+
+  @Post('auth/claim-name')
+  @HttpCode(200)
+  @UseGuards(SessionGuard, GuestGuard)
+  claimName(@CurrentUser() auth: AuthContext, @Body() dto: ClaimNameDto) {
+    return this.auth.claimName(auth, dto);
   }
 }

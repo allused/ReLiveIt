@@ -13,6 +13,8 @@ import { Category } from '../entities/category.entity';
 import { Photo } from '../entities/photo.entity';
 import { Wedding, WeddingStatus } from '../entities/wedding.entity';
 import { ImageStorageService } from '../storage/image-storage.service';
+import type { Response } from 'express';
+import { ZipFile } from 'yazl';
 
 @Injectable()
 export class PhotosService {
@@ -119,6 +121,7 @@ export class PhotosService {
       saved.originalKey = stored.originalKey;
       saved.mediumKey = stored.mediumKey;
       saved.thumbnailKey = stored.thumbnailKey;
+      saved.mimeType = stored.mimeType;
       saved.fileSize = stored.fileSize;
       return this.photos.save(saved);
     } catch (error) {
@@ -164,16 +167,60 @@ export class PhotosService {
     const byCategory = new Map(
       myCategoryPhotos.filter((p) => p.categoryId).map((p) => [p.categoryId as string, p]),
     );
+    const latestPhotos = await this.photos
+      .createQueryBuilder('p')
+      .distinctOn(['p.categoryId'])
+      .where('p.weddingId = :weddingId', { weddingId: wedding.id })
+      .andWhere('p.categoryId IS NOT NULL')
+      .orderBy('p.categoryId')
+      .addOrderBy('p.createdAt', 'DESC')
+      .getMany();
+    const previewByCategory = new Map(
+      latestPhotos
+        .filter((photo) => photo.categoryId)
+        .map((photo) => [photo.categoryId as string, photo]),
+    );
     const galleryCount = myCategoryPhotos.filter((p) => !p.categoryId).length;
     const maxGallery = Number(this.config.get('MAX_GALLERY_PHOTOS') ?? DEFAULT_MAX_GALLERY_PHOTOS);
     return {
       categories: categories.map((category) => ({
         ...category,
         myPhoto: byCategory.get(category.id) ?? null,
+        previewPhoto: previewByCategory.get(category.id) ?? null,
       })),
       galleryCount,
       maxGalleryPhotos: maxGallery,
     };
+  }
+
+  async deleteOwnCategoryPhoto(params: {
+    wedding: Wedding;
+    auth: ParticipantAuth;
+    photoId: string;
+  }) {
+    await this.assertActive(params.wedding);
+    this.assertGuestWedding(params.auth, params.wedding);
+
+    const photo = await this.photos.findOne({
+      where: { id: params.photoId, weddingId: params.wedding.id },
+    });
+    if (!photo) {
+      throw new NotFoundException('Photo not found.');
+    }
+    if (photo.uploaderParticipantId !== params.auth.participantId) {
+      throw new ForbiddenException('You can only delete your own photo.');
+    }
+    if (!photo.categoryId) {
+      throw new BadRequestException('You can only replace contest photos.');
+    }
+
+    await this.storage.remove(
+      [photo.originalKey, photo.mediumKey, photo.thumbnailKey].filter(
+        (key): key is string => Boolean(key) && key !== 'pending',
+      ),
+    );
+    await this.photos.delete(photo.id);
+    return { ok: true };
   }
 
   async getOwnedByWedding(photoId: string, weddingId: string) {
@@ -183,4 +230,54 @@ export class PhotosService {
     }
     return photo;
   }
+
+  async writeZip(wedding: Wedding, res: Response) {
+    const photos = await this.photos.find({
+      where: { weddingId: wedding.id },
+      order: { createdAt: 'ASC' },
+    });
+    const ready = photos.filter((photo) => photo.originalKey && photo.originalKey !== 'pending');
+    if (!ready.length) {
+      throw new NotFoundException('No photos to download.');
+    }
+
+    const filename = `${wedding.slug}-photos.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    const zip = new ZipFile();
+    const done = new Promise<void>((resolve, reject) => {
+      res.on('finish', resolve);
+      zip.outputStream.on('error', reject);
+    });
+    zip.outputStream.pipe(res);
+
+    const used = new Set<string>();
+    for (const photo of ready) {
+      try {
+        const buffer = await this.storage.read(photo.originalKey);
+        zip.addBuffer(buffer, zipEntryName(photo.originalFilename, used));
+      } catch {
+        // skip missing files
+      }
+    }
+    zip.end();
+    await done;
+  }
+}
+
+function zipEntryName(original: string, used: Set<string>): string {
+  const cleaned = (original || 'photo.jpg').replace(/[/\\]/g, '_').replace(/^\.+/, '');
+  const base = cleaned || 'photo.jpg';
+  let name = base;
+  let n = 2;
+  while (used.has(name.toLowerCase())) {
+    const dot = base.lastIndexOf('.');
+    const stem = dot > 0 ? base.slice(0, dot) : base;
+    const ext = dot > 0 ? base.slice(dot) : '';
+    name = `${stem}-${n}${ext}`;
+    n += 1;
+  }
+  used.add(name.toLowerCase());
+  return name;
 }

@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { ClaimedGuard } from '../auth/guards/claimed.guard';
 import { GuestGuard } from '../auth/guards/guest.guard';
 import { SessionGuard } from '../auth/guards/session.guard';
 import type { ParticipantAuth } from '../auth/auth.types';
@@ -7,7 +8,7 @@ import { CreateVoteDto } from './dto/create-vote.dto';
 import { VotesService } from './votes.service';
 
 @Controller()
-@UseGuards(SessionGuard, GuestGuard)
+@UseGuards(SessionGuard, GuestGuard, ClaimedGuard)
 export class VotesController {
   constructor(private readonly votes: VotesService) {}
 

@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="hu">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ReLiveIt — Vendégkalauz</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Outfit:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --cream: #f6efe4;
+        --paper: #fbf6ee;
+        --ink: #2b2418;
+        --muted: #7a6e5d;
+        --gold: #c4a574;
+        --blush: #8f6670;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: white;
+        color: var(--ink);
+        font-family: Outfit, "Segoe UI", sans-serif;
+        font-size: 12.5pt;
+        line-height: 1.45;
+      }
+      h1, h2, h3 {
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-weight: 500;
+        line-height: 1.15;
+        margin: 0;
+      }
+      h1 { font-size: 42pt; }
+      h2 { font-size: 26pt; }
+      p { margin: 0.55em 0 0; color: var(--ink); }
+      .muted { color: var(--muted); }
+      .gold { color: var(--gold); letter-spacing: 0.28em; text-transform: uppercase; font-size: 9pt; font-weight: 500; }
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        padding: 16mm 16mm 18mm;
+        page-break-after: always;
+        background: var(--cream);
+        position: relative;
+      }
+      .page:last-child { page-break-after: auto; }
+      .row {
+        display: flex;
+        gap: 14mm;
+        align-items: flex-start;
+        margin-top: 8mm;
+      }
+      .copy { flex: 1; min-width: 0; }
+      .phone {
+        flex: 0 0 62mm;
+        background: #1d1812;
+        border-radius: 18px;
+        padding: 7px;
+        box-shadow: 0 16px 40px rgba(43, 36, 24, 0.18);
+      }
+      .phone img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 12px;
+        background: var(--paper);
+      }
+      .step {
+        display: inline-block;
+        background: var(--gold);
+        color: var(--ink);
+        border-radius: 999px;
+        padding: 3px 12px;
+        font-size: 9pt;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .callout {
+        margin-top: 8mm;
+        background: var(--paper);
+        border-radius: 16px;
+        padding: 12px 16px;
+        box-shadow: 0 8px 24px rgba(43, 36, 24, 0.06);
+      }
+      .callout strong { color: var(--blush); }
+      ul { margin: 8px 0 0; padding-left: 18px; }
+      li { margin: 4px 0; }
+      .cover {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .cover-main { margin-top: 38mm; }
+      .cover h1 { font-size: 56pt; }
+      .footer {
+        position: absolute;
+        left: 16mm;
+        right: 16mm;
+        bottom: 10mm;
+        font-size: 8.5pt;
+        color: var(--muted);
+        display: flex;
+        justify-content: space-between;
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10mm;
+        margin-top: 8mm;
+      }
+      .tiny-phone { max-width: 72mm; margin: 0 auto; }
+      @page { size: A4; margin: 0; }
+      @media screen {
+        body { background: #d9cfc0; padding: 24px; }
+        .page {
+          margin: 0 auto 24px;
+          box-shadow: 0 20px 50px rgba(43, 36, 24, 0.18);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <section class="page cover">
+      <p class="gold">ReLiveIt</p>
+      <div class="cover-main">
+        <h1>Vendégkalauz</h1>
+        <p class="muted" style="font-size: 16pt; max-width: 140mm;">
+          Rövid bemutató a ceremóniamesternek: így működik az est fotó- és szavazóalkalmazása a vendégek telefonján.
+        </p>
+        <div class="callout" style="max-width: 150mm;">
+          <p><strong>Csak a vendégoldal.</strong> A pár saját nézetét, az admin felületet és a végső sorrendet ez a füzet nem tartalmazza.</p>
+        </div>
+      </div>
+      <p class="muted"> </p>
+      <div class="footer"><span>ReLiveIt</span><span>1 / 7</span></div>
+    </section>
+
+    <section class="page">
+      <p class="gold">Első lépés</p>
+      <h2>Olvasd be a QR-kódot</h2>
+      <div class="row">
+        <div class="copy">
+          <p>Minden vendégnek saját QR-kódja van — az asztalon, a meghívón vagy a ceremóniamesternél.</p>
+          <ul>
+            <li>Nyisd meg a telefon kameráját, és tartsd a kódra.</li>
+            <li>A megnyíló link a vendég saját belépője. Nem kell jelszó.</li>
+            <li>Ugyanezzel a kóddal egész este, sőt később is vissza lehet jönni.</li>
+          </ul>
+          <div class="callout">
+            <p><strong>Ceremóniamester:</strong> „A telefonotok kamerájával olvassátok be a saját QR-kódotokat. Nem kell alkalmazást letölteni.”</p>
+          </div>
+        </div>
+        <div class="phone">
+          <img src="screens/01-welcome.png" alt="Név megadása a meghívó megnyitása után" />
+        </div>
+      </div>
+      <div class="footer"><span>ReLiveIt · Vendégkalauz</span><span>2 / 7</span></div>
+    </section>
+
+    <section class="page">
+      <p class="step">1</p>
+      <h2>Add meg a neved</h2>
+      <div class="row">
+        <div class="copy">
+          <p>Első alkalommal az app megkérdezi: <em>Mi a neved?</em></p>
+          <ul>
+            <li>Írd be a saját neved.</li>
+            <li>Ha a meghívó közös (például egy párnak jár), a második név opcionális.</li>
+            <li>A <strong>Tovább</strong> gomb után kész is. Többet nem kell belépni.</li>
+          </ul>
+          <div class="callout">
+            <p><strong>Ceremóniamester:</strong> „Egyszer írjátok be a neveteket. Aki párban kaptott egy kódot, a második nevet is hozzáadhatja — a feltöltés és a szavazás mindkettőjüké.”</p>
+          </div>
+        </div>
+        <div class="phone">
+          <img src="screens/01-welcome.png" alt="Mi a neved? képernyő" />
+        </div>
+      </div>
+      <div class="footer"><span>ReLiveIt · Vendégkalauz</span><span>3 / 7</span></div>
+    </section>
+
+    <section class="page">
+      <p class="step">2</p>
+      <h2>A kezdőlap</h2>
+      <div class="row">
+        <div class="copy">
+          <p>A név után a vendég a saját kezdőlapjára érkezik. Itt négy dolog van:</p>
+          <ul>
+            <li><strong>Feltöltés</strong> — fotók hozzáadása</li>
+            <li><strong>Kategóriák</strong> — szavazás pillanatonként</li>
+            <li><strong>Galéria</strong> — az összes fotó</li>
+            <li><strong>Gyors szavazás</strong> — csak akkor, ha a pár bekapcsolta</li>
+          </ul>
+          <p class="muted">Alul a sávon bármikor vissza lehet lépni a kezdőlapra, a kategóriákra vagy a feltöltésre.</p>
+          <div class="callout">
+            <p><strong>Ceremóniamester:</strong> „Először töltsétek fel a képeiteket, aztán szavazzatok. Bármilyen telefonnal készült kép jó.”</p>
+          </div>
+        </div>
+        <div class="phone">
+          <img src="screens/02-home.png" alt="Vendég kezdőlap" />
+        </div>
+      </div>
+      <div class="footer"><span>ReLiveIt · Vendégkalauz</span><span>4 / 7</span></div>
+    </section>
+
+    <section class="page">
+      <p class="step">3</p>
+      <h2>Fotók feltöltése</h2>
+      <div class="grid-2">
+        <div>
+          <div class="phone tiny-phone">
+            <img src="screens/03-upload.png" alt="Galéria feltöltés" />
+          </div>
+          <h3 style="margin-top: 8px;">Galéria</h3>
+          <p class="muted">Több kép az estéből. Legfeljebb 30 általános fotó vendégenként. Nyomd meg: <em>Fotók kiválasztása</em>, majd <em>Fotók feltöltése</em>.</p>
+        </div>
+        <div>
+          <div class="phone tiny-phone">
+            <img src="screens/04-upload-category.png" alt="Kategória feltöltés" />
+          </div>
+          <h3 style="margin-top: 8px;">Kategória</h3>
+          <p class="muted">Kategóriánként <strong>egy</strong> fotó. Válassz kategóriát, töltsd fel, aztán szavazhatsz. A feltöltött kép később nem cserélhető.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <p><strong>Ceremóniamester:</strong> „A galériába mehet több kép. A kategóriákba — például a táncparkettre vagy a köszöntőre — csak egy, a kedvencetek.”</p>
+      </div>
+      <div class="footer"><span>ReLiveIt · Vendégkalauz</span><span>5 / 7</span></div>
+    </section>
+
+    <section class="page">
+      <p class="step">4</p>
+      <h2>Szavazás</h2>
+      <div class="row">
+        <div class="copy">
+          <p>A <em>Kategóriák</em> listában nyiss meg egy pillanatot, majd nyomd meg: <strong>Szavazás ebben a kategóriában</strong>.</p>
+          <ul>
+            <li><strong>Jobbra húzás</strong> = +1 pont (<em>Imádom</em>)</li>
+            <li><strong>Balra húzás</strong> = nincs pont (<em>Kihagyom</em>)</li>
+            <li>A saját fotódra nem szavazhatsz.</li>
+            <li>Egy fotóra csak egyszer.</li>
+          </ul>
+          <p class="muted"> </p>
+          <div class="callout">
+            <p><strong>Ceremóniamester:</strong> „Olyan, mint a kártyázás: jobbra, ha tetszik, balra, ha kihagyjátok. Semmi bonyolult.”</p>
+          </div>
+        </div>
+        <div class="phone">
+          <img src="screens/07-vote.png" alt="Szavazóképernyő" />
+        </div>
+      </div>
+      <div class="footer"><span>ReLiveIt · Vendégkalauz</span><span>6 / 7</span></div>
+    </section>
+
+    <section class="page">
+      <p class="step">5</p>
+      <h2>Galéria, és ennyi</h2>
+      <div class="row">
+        <div class="copy">
+          <p>A <em>Galériában</em> minden feltöltött fotó látszik. Az <em>Összes letöltése</em> gombbal a vendég elmenti az estét a telefonjára.</p>
+          <div class="callout">
+            <p><strong>Összefoglaló a teremben</strong></p>
+            <ul>
+              <li>QR → név → kész.</li>
+              <li>Tölts fel. Bármilyen telefonnal készült kép jó.</li>
+              <li>Kategóriánként egy kép, galériába több.</li>
+              <li>Szavazás: jobbra pont, balra kihagyás.</li>
+              <li>Ugyanaz a QR egész este.</li>
+            </ul>
+          </div>
+          <p class="muted" style="margin-top: 10mm;">Ha a pár lezárja az estét, a feltöltés és a szavazás megáll. A galéria marad.</p>
+        </div>
+        <div class="phone">
+          <img src="screens/08-gallery.png" alt="Galéria" />
+        </div>
+      </div>
+      <div class="footer"><span>ReLiveIt · Vendégkalauz</span><span>7 / 7</span></div>
+    </section>
+  </body>
+</html>

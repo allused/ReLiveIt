@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import ImageList from '@mui/material/ImageList';
@@ -7,42 +7,78 @@ import MenuItem from '@mui/material/MenuItem';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
-import { useParams } from 'react-router-dom';
-import { api, ApiError, mediaUrl } from '../../api/client';
-import type { GuestWedding } from '../../api/types';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { ApiError, mediaUrl } from '../../api/client';
+import { translateError } from '../../i18n';
+import { useDeleteCategoryPhoto, useGuestWedding, useUploadGalleryBatch, useUploadPhoto } from '../../api/hooks';
+import { ReplaceCategoryPhotoDialog } from '../../components/ReplaceCategoryPhotoDialog';
 import { AppButton, AppCard, AppTextField, ErrorText, Screen } from '../../components/ui';
+import { IMAGE_ACCEPT } from '../../constants';
+import { useT } from '../../i18n';
 
 type Item = {
   file: File;
   preview: string;
+  previewFailed?: boolean;
   status: 'pending' | 'uploading' | 'done' | 'error';
   message?: string;
 };
 
 export function UploadPage() {
   const { slug } = useParams();
-  const [wedding, setWedding] = useState<GuestWedding | null>(null);
-  const [mode, setMode] = useState<'category' | 'gallery'>('gallery');
+  const [searchParams] = useSearchParams();
+  const { data: wedding } = useGuestWedding(slug);
+  const uploadPhoto = useUploadPhoto();
+  const uploadBatch = useUploadGalleryBatch();
+  const deletePhoto = useDeleteCategoryPhoto();
+  const t = useT();
+  const [mode, setMode] = useState<'category' | 'gallery'>('category');
   const [categoryId, setCategoryId] = useState('');
   const [items, setItems] = useState<Item[]>([]);
   const [error, setError] = useState('');
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const [replaceError, setReplaceError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const load = () => {
-    if (!slug) return;
-    void api<GuestWedding>(`/weddings/${slug}`).then((data) => {
-      setWedding(data);
-      if (!categoryId && data.categories[0]) {
-        setCategoryId(data.categories[0].id);
-      }
+  const resetSelection = () => {
+    setItems((curr) => {
+      curr.forEach((item) => URL.revokeObjectURL(item.preview));
+      return [];
     });
+    setError('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   useEffect(() => {
-    load();
-  }, [slug]);
+    const fromQuery = searchParams.get('category');
+    if (fromQuery) {
+      setMode('category');
+      setCategoryId(fromQuery);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!categoryId && wedding?.categories[0]) {
+      setCategoryId(wedding.categories[0].id);
+    }
+  }, [categoryId, wedding]);
 
   const selectedCategory = wedding?.categories.find((c) => c.id === categoryId);
   const concluded = wedding?.status === 'CONCLUDED';
+  const hasCategoryPhoto = mode === 'category' && Boolean(selectedCategory?.myPhoto);
+
+  const confirmReplace = async () => {
+    if (!slug || !selectedCategory?.myPhoto) return;
+    setReplaceError('');
+    try {
+      await deletePhoto.mutateAsync({ slug, photoId: selectedCategory.myPhoto.id });
+      setReplaceOpen(false);
+    } catch (err) {
+      setReplaceError(
+        err instanceof ApiError || err instanceof Error ? err.message : t('guest.upload.replaceFailed'),
+      );
+    }
+  };
 
   const onFiles = (fileList: FileList | null) => {
     if (!fileList) return;
@@ -65,16 +101,15 @@ export function UploadPage() {
           const form = new FormData();
           form.append('file', item.file);
           form.append('categoryId', categoryId);
-          await api(`/weddings/${slug}/photos`, { method: 'POST', body: form });
+          await uploadPhoto.mutateAsync({ slug, form });
+          resetSelection();
+          continue;
         } else {
           const form = new FormData();
           form.append('files', item.file);
-          const result = await api<{ failed: { filename: string; message: string }[] }>(
-            `/weddings/${slug}/photos/batch`,
-            { method: 'POST', body: form },
-          );
+          const result = await uploadBatch.mutateAsync({ slug, form });
           if (result.failed.length) {
-            throw new Error(result.failed[0].message);
+            throw new Error(translateError(result.failed[0].message));
           }
         }
         setItems((curr) => curr.map((row) => (row.preview === item.preview ? { ...row, status: 'done' } : row)));
@@ -85,22 +120,21 @@ export function UploadPage() {
               ? {
                   ...row,
                   status: 'error',
-                  message: err instanceof ApiError || err instanceof Error ? err.message : 'Upload failed.',
+                  message: err instanceof ApiError || err instanceof Error ? err.message : t('guest.upload.failed'),
                 }
               : row,
           ),
         );
       }
     }
-    load();
   };
 
   if (concluded) {
     return (
       <Screen>
-        <Typography variant="h1">Uploads closed</Typography>
+        <Typography variant="h1">{t('guest.upload.closedTitle')}</Typography>
         <Typography color="text.secondary" sx={{ mt: 1.5 }}>
-          This wedding has already concluded. Uploads are no longer available.
+          {t('guest.upload.closedBody')}
         </Typography>
       </Screen>
     );
@@ -108,27 +142,36 @@ export function UploadPage() {
 
   return (
     <Screen>
-      <Typography variant="h1">Upload</Typography>
+      <Typography variant="h1">{t('guest.upload.title')}</Typography>
       <ToggleButtonGroup
         exclusive
         fullWidth
         value={mode}
         onChange={(_, value: 'category' | 'gallery' | null) => {
-          if (value) setMode(value);
+          if (!value || value === mode) return;
+          resetSelection();
+          setMode(value);
         }}
         sx={{ mt: 2 }}
       >
-        <ToggleButton value="gallery">Gallery</ToggleButton>
-        <ToggleButton value="category">Category</ToggleButton>
+        <ToggleButton value="gallery">{t('guest.upload.gallery')}</ToggleButton>
+        <ToggleButton value="category">{t('guest.upload.category')}</ToggleButton>
       </ToggleButtonGroup>
 
       {mode === 'category' && (
         <AppCard sx={{ mt: 2 }}>
           <AppTextField
             select
-            label="Choose category"
+            label={t('guest.upload.chooseCategory')}
             value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (next === categoryId) return;
+              resetSelection();
+              setReplaceOpen(false);
+              setReplaceError('');
+              setCategoryId(next);
+            }}
           >
             {wedding?.categories.map((category) => (
               <MenuItem key={category.id} value={category.id}>
@@ -139,14 +182,26 @@ export function UploadPage() {
           {selectedCategory?.myPhoto && (
             <Box sx={{ mt: 2 }}>
               <Box
+                key={selectedCategory.myPhoto.id}
                 component="img"
                 src={mediaUrl(selectedCategory.myPhoto.id, 'thumb')}
                 alt=""
                 sx={{ width: 96, height: 96, borderRadius: 3, objectFit: 'cover' }}
               />
               <Typography color="text.secondary" variant="body2" sx={{ mt: 1 }}>
-                You have already uploaded a photo to this category.
+                {t('guest.upload.alreadyInCategory')}
               </Typography>
+              <AppButton
+                tone="gold"
+                fullWidth
+                sx={{ mt: 1.5 }}
+                onClick={() => {
+                  setReplaceError('');
+                  setReplaceOpen(true);
+                }}
+              >
+                {t('guest.upload.replacePhoto')}
+              </AppButton>
             </Box>
           )}
         </AppCard>
@@ -154,42 +209,84 @@ export function UploadPage() {
 
       {mode === 'gallery' && (
         <Typography color="text.secondary" variant="body2" sx={{ mt: 2 }}>
-          {wedding?.galleryCount ?? 0} / {wedding?.maxGalleryPhotos ?? 30} general photos
+          {t('guest.upload.galleryCount', {
+            current: wedding?.galleryCount ?? 0,
+            max: wedding?.maxGalleryPhotos ?? 30,
+          })}
         </Typography>
       )}
 
-      <AppButton tone="gold" fullWidth component="label" sx={{ mt: 2 }}>
-        Select photos
-        <input
-          type="file"
-          hidden
-          accept="image/jpeg,image/png,image/webp"
-          multiple={mode === 'gallery'}
-          onChange={(e) => onFiles(e.target.files)}
-        />
-      </AppButton>
-
-      <ImageList cols={3} gap={8} sx={{ mt: 2 }}>
-        {items.map((item) => (
-          <ImageListItem key={item.preview} sx={{ borderRadius: 3, overflow: 'hidden' }}>
-            <img src={item.preview} alt="" style={{ aspectRatio: '1 / 1', objectFit: 'cover' }} />
-            <Chip
-              size="small"
-              label={item.status}
-              sx={{ position: 'absolute', bottom: 6, left: 6, bgcolor: 'primary.main', color: 'primary.contrastText' }}
+      {!hasCategoryPhoto && (
+        <>
+          <AppButton tone="gold" fullWidth component="label" sx={{ mt: 2 }}>
+            {t('guest.upload.selectPhotos')}
+            <input
+              ref={fileInputRef}
+              type="file"
+              hidden
+              accept={IMAGE_ACCEPT}
+              multiple={mode === 'gallery'}
+              onChange={(e) => onFiles(e.target.files)}
             />
-          </ImageListItem>
-        ))}
-      </ImageList>
-      {items.some((item) => item.status === 'error') && (
-        <Typography color="error" variant="body2" sx={{ mt: 1.5 }}>
-          {items.find((item) => item.status === 'error')?.message} You can retry failed photos.
-        </Typography>
+          </AppButton>
+
+          <ImageList cols={3} gap={8} sx={{ mt: 2 }}>
+            {items.map((item) => (
+              <ImageListItem key={item.preview} sx={{ borderRadius: 3, overflow: 'hidden', bgcolor: 'background.paper' }}>
+                {item.previewFailed ? (
+                  <Box
+                    sx={{
+                      aspectRatio: '1 / 1',
+                      display: 'grid',
+                      placeItems: 'center',
+                      px: 1,
+                      bgcolor: 'secondary.light',
+                    }}
+                  >
+                    <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
+                      {t('guest.upload.iphonePhoto')}
+                    </Typography>
+                  </Box>
+                ) : (
+                  <img
+                    src={item.preview}
+                    alt=""
+                    style={{ aspectRatio: '1 / 1', objectFit: 'cover' }}
+                    onError={() =>
+                      setItems((curr) =>
+                        curr.map((row) => (row.preview === item.preview ? { ...row, previewFailed: true } : row)),
+                      )
+                    }
+                  />
+                )}
+                <Chip
+                  size="small"
+                  label={t(`uploadStatus.${item.status}`)}
+                  sx={{ position: 'absolute', bottom: 6, left: 6, bgcolor: 'primary.main', color: 'primary.contrastText' }}
+                />
+              </ImageListItem>
+            ))}
+          </ImageList>
+          {items.some((item) => item.status === 'error') && (
+            <Typography color="error" variant="body2" sx={{ mt: 1.5 }}>
+              {t('guest.upload.retry', {
+                message: items.find((item) => item.status === 'error')?.message ?? '',
+              })}
+            </Typography>
+          )}
+          <ErrorText>{error}</ErrorText>
+          <AppButton fullWidth sx={{ mt: 2 }} onClick={() => void upload()} disabled={!items.length}>
+            {t('guest.upload.uploadPhotos')}
+          </AppButton>
+        </>
       )}
-      <ErrorText>{error}</ErrorText>
-      <AppButton fullWidth sx={{ mt: 2 }} onClick={() => void upload()} disabled={!items.length}>
-        Upload photos
-      </AppButton>
+      <ReplaceCategoryPhotoDialog
+        open={replaceOpen}
+        error={replaceError}
+        loading={deletePhoto.isPending}
+        onClose={() => setReplaceOpen(false)}
+        onConfirm={() => void confirmReplace()}
+      />
     </Screen>
   );
 }

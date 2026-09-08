@@ -6,6 +6,7 @@ const ink = '#2B2418';
 const muted = '#7A6E5D';
 const gold = '#C4A574';
 const blush = '#E8C4B8';
+export const rose = '#C99486';
 
 export const theme = createTheme({
   palette: {

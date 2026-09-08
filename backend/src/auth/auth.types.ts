@@ -11,9 +11,10 @@ export type ParticipantAuth = {
   participantId: string;
   weddingId: string;
   role: ParticipantRole;
-  primaryName: string;
+  primaryName: string | null;
   secondaryName: string | null;
   displayName: string;
+  claimed: boolean;
   weddingSlug: string;
   weddingName: string;
 };

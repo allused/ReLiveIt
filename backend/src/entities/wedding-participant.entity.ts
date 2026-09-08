@@ -43,11 +43,14 @@ export class WeddingParticipant {
   @Column({ type: 'varchar' })
   role: ParticipantRole;
 
-  @Column()
-  primaryName: string;
+  @Column({ type: 'varchar', nullable: true })
+  primaryName: string | null;
 
   @Column({ type: 'varchar', nullable: true })
   secondaryName: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  claimedAt: Date | null;
 
   @Index()
   @Column({ type: 'varchar', default: ParticipantStatus.ACTIVE })

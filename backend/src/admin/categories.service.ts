@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Category } from '../entities/category.entity';
 import { Photo } from '../entities/photo.entity';
+import { ImageStorageService } from '../storage/image-storage.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { ReorderCategoriesDto } from './dto/reorder-categories.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -15,6 +16,7 @@ export class CategoriesService {
     private readonly categories: Repository<Category>,
     @InjectRepository(Photo)
     private readonly photos: Repository<Photo>,
+    private readonly storage: ImageStorageService,
     private readonly weddings: WeddingsService,
   ) {}
 
@@ -61,11 +63,10 @@ export class CategoriesService {
     if (!category) {
       throw new NotFoundException('Category not found.');
     }
-    const photoCount = await this.photos.count({ where: { categoryId: id } });
-    if (photoCount > 0) {
-      throw new BadRequestException(
-        'This category still has photos. Disable it instead of deleting so historical photos are preserved.',
-      );
+    const photos = await this.photos.find({ where: { categoryId: id } });
+    await this.storage.remove(photos.flatMap(photoStorageKeys));
+    if (photos.length) {
+      await this.photos.delete({ categoryId: id });
     }
     await this.categories.delete(id);
     return { ok: true };
@@ -82,4 +83,10 @@ export class CategoriesService {
     );
     return this.list(weddingId);
   }
+}
+
+function photoStorageKeys(photo: Photo): string[] {
+  return [photo.originalKey, photo.mediumKey, photo.thumbnailKey].filter(
+    (key): key is string => Boolean(key) && key !== 'pending',
+  );
 }

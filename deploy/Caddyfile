@@ -1,0 +1,25 @@
+{
+	admin off
+}
+
+{$SITE_ADDRESS:reliveit.hu} {
+	encode gzip zstd
+
+	handle /api/* {
+		request_body {
+			max_size 15MB
+		}
+		uri strip_prefix /api
+		reverse_proxy backend:3000
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+www.reliveit.hu {
+	redir https://reliveit.hu{uri} permanent
+}

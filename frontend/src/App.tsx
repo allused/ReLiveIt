@@ -5,6 +5,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { InvitePage } from './pages/InvitePage';
+import { WelcomePage } from './pages/WelcomePage';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { WeddingManagePage } from './pages/admin/WeddingManagePage';
 import { CategoriesPage } from './pages/guest/CategoriesPage';
@@ -30,6 +31,7 @@ function GuestGate({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <Splash />;
   if (user?.kind !== 'participant' || user.role !== 'GUEST') return <Navigate to="/login" replace />;
+  if (!user.claimed) return <Navigate to="/welcome" replace />;
   return children;
 }
 
@@ -53,6 +55,7 @@ function HomeRedirect() {
   if (loading) return <Splash />;
   if (user?.kind === 'admin') return <Navigate to="/admin" replace />;
   if (user?.kind === 'participant' && user.role === 'GUEST') {
+    if (!user.claimed) return <Navigate to="/welcome" replace />;
     return <Navigate to={`/wedding/${user.weddingSlug}`} replace />;
   }
   if (user?.kind === 'participant' && user.role === 'REVIEWER') {
@@ -67,6 +70,7 @@ export default function App() {
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/invite/:token" element={<InvitePage />} />
+      <Route path="/welcome" element={<WelcomePage />} />
       <Route
         path="/admin"
         element={

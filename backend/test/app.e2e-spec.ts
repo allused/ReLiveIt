@@ -36,6 +36,7 @@ describe('ReLiveIt business rules (e2e)', () => {
     await dataSource.query('DELETE FROM access_invitations');
     await dataSource.query('DELETE FROM wedding_participants');
     await dataSource.query('DELETE FROM categories');
+    await dataSource.query('DELETE FROM timeline_events');
     await dataSource.query('DELETE FROM weddings');
     await dataSource.query('DELETE FROM admins');
     await dataSource.getRepository(Admin).save({
@@ -127,6 +128,7 @@ describe('ReLiveIt business rules (e2e)', () => {
 
     const login = await request(app.getHttpServer()).get(`/invite/${token}`).expect(200);
     expect(login.body.redirectTo).toBe(`/wedding/${wedding.body.slug}`);
+    expect(login.body.needsName).toBe(false);
     expect(login.headers['cache-control']).toContain('no-store');
 
     await admin.post(`/admin/participants/${guest.body.id}/invitation/regenerate`).expect(201);
@@ -138,6 +140,68 @@ describe('ReLiveIt business rules (e2e)', () => {
 
     await admin.post(`/admin/participants/${guest.body.id}/invitation/revoke`).expect(200);
     await request(app.getHttpServer()).get(`/invite/${newToken}`).expect(401);
+  });
+
+  it('lets an admin download every active invitation QR as a zip', async () => {
+    const admin = await adminAgent();
+    const wedding = await admin.post('/admin/weddings').send({ name: 'QR Zip Wedding' }).expect(201);
+    await admin
+      .post(`/admin/weddings/${wedding.body.id}/participants`)
+      .send({ role: 'GUEST', count: 2 })
+      .expect(201);
+    await admin
+      .post(`/admin/weddings/${wedding.body.id}/participants`)
+      .send({ role: 'REVIEWER', primaryName: 'Bride' })
+      .expect(201);
+
+    const zip = await admin.get(`/admin/weddings/${wedding.body.id}/invitations/qr.zip`).expect(200);
+    expect(zip.headers['content-type']).toContain('zip');
+    expect(zip.headers['content-disposition']).toContain('qr-codes.zip');
+    expect(zip.body.length).toBeGreaterThan(100);
+  });
+
+  it('creates unnamed guest invitations that are claimed on first visit', async () => {
+    const admin = await adminAgent();
+    const wedding = await admin.post('/admin/weddings').send({ name: 'Open Bar' }).expect(201);
+    const guest = await admin
+      .post(`/admin/weddings/${wedding.body.id}/participants`)
+      .send({ role: 'GUEST' })
+      .expect(201);
+    expect(guest.body.claimed).toBe(false);
+    expect(guest.body.primaryName).toBeNull();
+    expect(guest.body.displayName).toBe('Waiting for name');
+
+    const batch = await admin
+      .post(`/admin/weddings/${wedding.body.id}/participants`)
+      .send({ role: 'GUEST', count: 3 })
+      .expect(201);
+    expect(batch.body.count).toBe(3);
+    expect(batch.body.items).toHaveLength(3);
+    expect(batch.body.items.every((item: { claimed: boolean }) => item.claimed === false)).toBe(
+      true,
+    );
+
+    const invite = await admin.get(`/admin/participants/${guest.body.id}/invitation`).expect(200);
+    const token = invite.body.url.split('/invite/')[1];
+    const guestAgent = request.agent(app.getHttpServer());
+    const opened = await guestAgent.get(`/invite/${token}`).expect(200);
+    expect(opened.body.needsName).toBe(true);
+    expect(opened.body.redirectTo).toBe('/welcome');
+
+    await guestAgent.get(`/weddings/${wedding.body.slug}`).expect(403);
+    await guestAgent
+      .post('/auth/claim-name')
+      .send({ primaryName: 'Kata', secondaryName: 'Máté' })
+      .expect(200);
+    const me = await guestAgent.get('/auth/me').expect(200);
+    expect(me.body.claimed).toBe(true);
+    expect(me.body.displayName).toBe('Kata & Máté');
+    await guestAgent.get(`/weddings/${wedding.body.slug}`).expect(200);
+    await guestAgent.post('/auth/claim-name').send({ primaryName: 'Other' }).expect(400);
+
+    const again = await guestAgent.get(`/invite/${token}`).expect(200);
+    expect(again.body.needsName).toBe(false);
+    expect(again.body.redirectTo).toBe(`/wedding/${wedding.body.slug}`);
   });
 
   it('invalidates participant sessions after regenerate or deactivate', async () => {
@@ -239,6 +303,10 @@ describe('ReLiveIt business rules (e2e)', () => {
     expect(queue.body.photos.find((p: { id: string }) => p.id === other.body.id)).toBeUndefined();
     expect(queue.body.photos.find((p: { id: string }) => p.id === first.body.id)).toBeUndefined();
 
+    const zip = await agentA.get(`/weddings/${wedding.body.slug}/photos/zip`).expect(200);
+    expect(zip.headers['content-type']).toContain('zip');
+    expect(zip.headers['content-disposition']).toContain('.zip');
+
     await agentR.post(`/reviewer/weddings/${wedding.body.id}/conclude`).expect(201);
     await agentA
       .post(`/weddings/${wedding.body.slug}/photos`)
@@ -247,9 +315,80 @@ describe('ReLiveIt business rules (e2e)', () => {
     await agentB.post(`/photos/${first.body.id}/vote`).send({ value: 1 }).expect(400);
 
     const rankings = await agentR.get(`/reviewer/weddings/${wedding.body.id}/rankings`).expect(200);
-    const ceremony = rankings.body.find((row: { category: { name: string } }) => row.category.name === 'Ceremony');
+    expect(rankings.body.overall).toHaveLength(2);
+    expect(rankings.body.overall[0].totalPoints).toBe(1);
+    expect(rankings.body.overall[0].rank).toBe(1);
+    const ceremony = rankings.body.categories.find(
+      (row: { category: { name: string } }) => row.category.name === 'Ceremony',
+    );
     expect(ceremony.top[0].totalPoints).toBe(1);
     expect(ceremony.top[0].voteCount).toBe(1);
+  });
+
+  it('lets guests replace a contest photo and lets admins delete categories that have photos', async () => {
+    const admin = await adminAgent();
+    const wedding = await admin.post('/admin/weddings').send({ name: 'Replace Wedding' }).expect(201);
+    const category = await admin
+      .post(`/admin/weddings/${wedding.body.id}/categories`)
+      .send({ name: 'Dance' })
+      .expect(201);
+    const guestA = await admin
+      .post(`/admin/weddings/${wedding.body.id}/participants`)
+      .send({ role: 'GUEST', primaryName: 'John' })
+      .expect(201);
+    const guestB = await admin
+      .post(`/admin/weddings/${wedding.body.id}/participants`)
+      .send({ role: 'GUEST', primaryName: 'Maria' })
+      .expect(201);
+    const reviewer = await admin
+      .post(`/admin/weddings/${wedding.body.id}/participants`)
+      .send({ role: 'REVIEWER', primaryName: 'Bride' })
+      .expect(201);
+
+    const inviteA = await admin.get(`/admin/participants/${guestA.body.id}/invitation`).expect(200);
+    const inviteB = await admin.get(`/admin/participants/${guestB.body.id}/invitation`).expect(200);
+    const inviteR = await admin.get(`/admin/participants/${reviewer.body.id}/invitation`).expect(200);
+    const agentA = request.agent(app.getHttpServer());
+    const agentB = request.agent(app.getHttpServer());
+    const agentR = request.agent(app.getHttpServer());
+    await agentA.get(`/invite/${inviteA.body.url.split('/invite/')[1]}`).expect(200);
+    await agentB.get(`/invite/${inviteB.body.url.split('/invite/')[1]}`).expect(200);
+    await agentR.get(`/invite/${inviteR.body.url.split('/invite/')[1]}`).expect(200);
+
+    const file = await jpeg();
+    const first = await agentA
+      .post(`/weddings/${wedding.body.slug}/photos`)
+      .attach('file', file, { filename: 'one.jpg', contentType: 'image/jpeg' })
+      .field('categoryId', category.body.id)
+      .expect(201);
+
+    await agentB.post(`/photos/${first.body.id}/vote`).send({ value: 1 }).expect(201);
+    await agentB.delete(`/weddings/${wedding.body.slug}/photos/${first.body.id}`).expect(403);
+
+    const gallery = await agentA
+      .post(`/weddings/${wedding.body.slug}/photos`)
+      .attach('file', file, { filename: 'gallery.jpg', contentType: 'image/jpeg' })
+      .expect(201);
+    await agentA.delete(`/weddings/${wedding.body.slug}/photos/${gallery.body.id}`).expect(400);
+
+    await agentA.delete(`/weddings/${wedding.body.slug}/photos/${first.body.id}`).expect(200);
+    const afterDelete = await agentA.get(`/weddings/${wedding.body.slug}`).expect(200);
+    const dance = afterDelete.body.categories.find((row: { id: string }) => row.id === category.body.id);
+    expect(dance.myPhoto).toBeNull();
+
+    const second = await agentA
+      .post(`/weddings/${wedding.body.slug}/photos`)
+      .attach('file', file, { filename: 'two.jpg', contentType: 'image/jpeg' })
+      .field('categoryId', category.body.id)
+      .expect(201);
+    expect(second.body.id).not.toBe(first.body.id);
+
+    await agentR.post(`/reviewer/weddings/${wedding.body.id}/conclude`).expect(201);
+    await agentA.delete(`/weddings/${wedding.body.slug}/photos/${second.body.id}`).expect(400);
+
+    await admin.delete(`/admin/categories/${category.body.id}`).expect(200);
+    const leftover = await admin.get(`/admin/weddings/${wedding.body.id}/categories`).expect(200);
+    expect(leftover.body).toHaveLength(0);
   });
 
   it('stores invitation hashes rather than plaintext tokens', async () => {
@@ -293,5 +432,103 @@ describe('ReLiveIt business rules (e2e)', () => {
     const enabled = await guestAgent.get(`/weddings/${off.body.slug}`).expect(200);
     expect(enabled.body.quickVoteEnabled).toBe(true);
     await guestAgent.get(`/weddings/${off.body.slug}/quick-vote`).expect(200);
+  });
+
+  it('lets an admin set a couple photo that guests can view but not mix into the gallery', async () => {
+    const admin = await adminAgent();
+    const wedding = await admin.post('/admin/weddings').send({ name: 'Cover Wedding' }).expect(201);
+    expect(wedding.body.hasCoverPhoto).toBe(false);
+
+    const guest = await admin
+      .post(`/admin/weddings/${wedding.body.id}/participants`)
+      .send({ role: 'GUEST', primaryName: 'John' })
+      .expect(201);
+    const invite = await admin.get(`/admin/participants/${guest.body.id}/invitation`).expect(200);
+    const guestAgent = request.agent(app.getHttpServer());
+    await guestAgent.get(`/invite/${invite.body.url.split('/invite/')[1]}`).expect(200);
+
+    const file = await jpeg();
+    const uploaded = await admin
+      .post(`/admin/weddings/${wedding.body.id}/cover`)
+      .attach('file', file, { filename: 'couple.jpg', contentType: 'image/jpeg' })
+      .expect(201);
+    expect(uploaded.body.hasCoverPhoto).toBe(true);
+    const firstUpdatedAt = uploaded.body.updatedAt;
+
+    const replacement = await sharp({
+      create: { width: 400, height: 500, channels: 3, background: '#4a6b4a' },
+    })
+      .jpeg()
+      .toBuffer();
+    const replaced = await admin
+      .post(`/admin/weddings/${wedding.body.id}/cover`)
+      .attach('file', replacement, { filename: 'couple-new.jpg', contentType: 'image/jpeg' })
+      .expect(201);
+    expect(replaced.body.hasCoverPhoto).toBe(true);
+    expect(replaced.body.updatedAt).not.toBe(firstUpdatedAt);
+
+    const home = await guestAgent.get(`/weddings/${wedding.body.slug}`).expect(200);
+    expect(home.body.hasCoverPhoto).toBe(true);
+    await guestAgent.get(`/media/cover/${wedding.body.id}?variant=medium`).expect(200);
+
+    const gallery = await guestAgent.get(`/weddings/${wedding.body.slug}/photos`).expect(200);
+    expect(gallery.body.items).toHaveLength(0);
+
+    await admin.delete(`/admin/weddings/${wedding.body.id}/cover`).expect(204);
+    const after = await guestAgent.get(`/weddings/${wedding.body.slug}`).expect(200);
+    expect(after.body.hasCoverPhoto).toBe(false);
+    await guestAgent.get(`/media/cover/${wedding.body.id}`).expect(404);
+  });
+
+  it('lets an admin schedule timeline moments that reviewers see among photos', async () => {
+    const admin = await adminAgent();
+    const wedding = await admin.post('/admin/weddings').send({ name: 'Timeline Wedding' }).expect(201);
+    const guest = await admin
+      .post(`/admin/weddings/${wedding.body.id}/participants`)
+      .send({ role: 'GUEST', primaryName: 'John' })
+      .expect(201);
+    const reviewer = await admin
+      .post(`/admin/weddings/${wedding.body.id}/participants`)
+      .send({ role: 'REVIEWER', primaryName: 'Bride' })
+      .expect(201);
+
+    const dinner = await admin
+      .post(`/admin/weddings/${wedding.body.id}/timeline-events`)
+      .send({ title: 'Dinner', occursAt: new Date(Date.now() - 60 * 60 * 1000).toISOString() })
+      .expect(201);
+    expect(dinner.body.title).toBe('Dinner');
+
+    await admin
+      .post(`/admin/weddings/${wedding.body.id}/timeline-events`)
+      .send({ title: 'Midnight cake', occursAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() })
+      .expect(201);
+
+    const listed = await admin.get(`/admin/weddings/${wedding.body.id}/timeline-events`).expect(200);
+    expect(listed.body.map((event: { title: string }) => event.title)).toEqual([
+      'Dinner',
+      'Midnight cake',
+    ]);
+
+    const inviteG = await admin.get(`/admin/participants/${guest.body.id}/invitation`).expect(200);
+    const inviteR = await admin.get(`/admin/participants/${reviewer.body.id}/invitation`).expect(200);
+    const guestAgent = request.agent(app.getHttpServer());
+    const reviewerAgent = request.agent(app.getHttpServer());
+    await guestAgent.get(`/invite/${inviteG.body.url.split('/invite/')[1]}`).expect(200);
+    await reviewerAgent.get(`/invite/${inviteR.body.url.split('/invite/')[1]}`).expect(200);
+
+    const file = await jpeg();
+    await guestAgent
+      .post(`/weddings/${wedding.body.slug}/photos`)
+      .attach('file', file, { filename: 'dance.jpg', contentType: 'image/jpeg' })
+      .expect(201);
+
+    const timeline = await reviewerAgent.get(`/reviewer/weddings/${wedding.body.id}/timeline`).expect(200);
+    expect(timeline.body.items.map((item: { type: string; event?: { title: string } }) =>
+      item.type === 'event' ? item.event?.title : item.type,
+    )).toEqual(['Dinner', 'photos', 'Midnight cake']);
+
+    await admin.delete(`/admin/timeline-events/${dinner.body.id}`).expect(204);
+    const afterDelete = await admin.get(`/admin/weddings/${wedding.body.id}/timeline-events`).expect(200);
+    expect(afterDelete.body).toHaveLength(1);
   });
 });

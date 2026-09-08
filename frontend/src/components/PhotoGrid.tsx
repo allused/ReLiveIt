@@ -11,21 +11,39 @@ export function PhotoGrid({
   onOpen: (index: number) => void;
 }) {
   return (
-    <ImageList cols={2} gap={8} sx={{ m: 0 }}>
+    <ImageList cols={4} gap={6} sx={{ m: 0 }}>
       {photos.map((photo, index) => (
         <ImageListItem
           key={photo.id}
-          onClick={() => onOpen(index)}
-          sx={{ borderRadius: 3, overflow: 'hidden', cursor: 'pointer', bgcolor: 'action.hover' }}
+          sx={{
+            borderRadius: 3,
+            overflow: 'hidden',
+            bgcolor: 'action.hover',
+          }}
         >
-          <img
-            src={mediaUrl(photo.id, 'thumb')}
-            alt=""
-            loading="lazy"
-            style={{ aspectRatio: '4 / 5', objectFit: 'cover', width: '100%' }}
-          />
+          <button
+            type="button"
+            onClick={() => onOpen(index)}
+            aria-label={`Open photo ${index + 1}`}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: 0,
+              border: 0,
+              background: 'transparent',
+              cursor: 'pointer',
+            }}
+          >
+            <img
+              src={mediaUrl(photo.id, 'thumb')}
+              alt=""
+              loading="lazy"
+              style={{ aspectRatio: '4 / 5', objectFit: 'cover', width: '100%' }}
+            />
+          </button>
         </ImageListItem>
       ))}
     </ImageList>
   );
 }
+

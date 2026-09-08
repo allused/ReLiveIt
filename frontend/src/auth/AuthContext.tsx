@@ -1,5 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, ApiError } from '../api/client';
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../api/keys';
+import { useAuthMe, useLogout } from '../api/hooks';
 import type { AuthUser } from '../api/types';
 
 type AuthState = {
@@ -12,34 +14,27 @@ type AuthState = {
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const meQuery = useAuthMe();
+  const { mutateAsync: logoutAsync } = useLogout();
 
   const refresh = useCallback(async () => {
-    try {
-      const me = await api<AuthUser>('/auth/me');
-      setUser(me);
-    } catch (error) {
-      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-        setUser(null);
-      } else {
-        setUser(null);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    await queryClient.invalidateQueries({ queryKey: queryKeys.auth.me() });
+  }, [queryClient]);
 
   const logout = useCallback(async () => {
-    await api('/auth/logout', { method: 'POST' });
-    setUser(null);
-  }, []);
+    await logoutAsync();
+  }, [logoutAsync]);
 
-  const value = useMemo(() => ({ user, loading, refresh, logout }), [user, loading, refresh, logout]);
+  const value = useMemo(
+    () => ({
+      user: meQuery.data ?? null,
+      loading: meQuery.isPending,
+      refresh,
+      logout,
+    }),
+    [logout, meQuery.data, meQuery.isPending, refresh],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -13,17 +13,20 @@ import type { TextFieldProps } from '@mui/material/TextField';
 export function Screen({
   children,
   wide = false,
+  padded = true,
 }: {
   children: ReactNode;
   wide?: boolean;
+  padded?: boolean;
 }) {
   return (
     <Container
       maxWidth={false}
+      disableGutters={!padded}
       sx={{
         maxWidth: wide ? 720 : 480,
         py: 3,
-        px: 2.5,
+        px: padded ? 2.5 : 0,
         pb: 12,
         minHeight: '100dvh',
       }}
